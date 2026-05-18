@@ -1,0 +1,61 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build web app
+        run: npm run build
+        working-directory: web
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Add Android SDK
+        run: |
+          mkdir -p ~/.android
+          touch ~/.android/repositories.cfg
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+        working-directory: web
+
+      - name: Build APK
+        run: ./gradlew assembleDebug
+        working-directory: web/android
+        env:
+          ANDROID_HOME: /home/runner/android-sdk
+          ANDROID_SDK_ROOT: /home/runner/android-sdk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HermesAgent-APK
+          path: web/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
